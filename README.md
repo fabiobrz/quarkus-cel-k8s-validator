@@ -1,7 +1,7 @@
 # Quarkus CEL Kubernetes Validator
 
-An example application showcasing the **Quarkus Chicory extension** for a WebAssembly-based CEL 
-(Common Expression Language) policy validation of Kubernetes resources use case.
+An example application showcasing the **[Quarkus Chicory extension](https://github.com/quarkiverse/quarkus-chicory)** 
+for a WebAssembly-based CEL (Common Expression Language) policy validation of Kubernetes resources use case.
 
 This example implements a [Kubernetes-style policy validation](https://kubernetes.io/docs/reference/using-api/cel/) by 
 leveraging:
