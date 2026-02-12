@@ -1,0 +1,1 @@
+object.kind != "Deployment" || (has(object.spec.replicas) && object.spec.replicas >= 2)
