@@ -32,10 +32,7 @@ public class K8sCelValidatorService {
     WasmQuarkusContext wasmQuarkusContext;
 
     Instance instance;
-    ExportFunction malloc;
-    ExportFunction free;
-    ExportFunction evalPolicy;
-    Memory memory;
+    K8sCel_ModuleExports exports;
 
     @PostConstruct
     public void init() throws IOException {
@@ -59,27 +56,15 @@ public class K8sCelValidatorService {
 
         Store store = new Store().addFunction(wasi.toHostFunctions());
 
-        // WasmQuarkusContext provides Instance with MachineFactory dynamically
-        // configured based on environment (dev, prod, native)
-        instance = Instance.builder(wasmModule)
-                .withMachineFactory(wasmQuarkusContext.getMachineFactory())
-                .withImportValues(store.toImportValues())
-                // Don't auto-run _start(), we'll call it manually
-                .withStart(false)
-                .build();
-
-        // Get exported functions BEFORE calling _start
-        malloc = instance.export("malloc");
-        free = instance.export("free");
-        evalPolicy = instance.export("evalPolicy");
-        memory = instance.memory();
-
-        // Initialize Go runtime by calling _start()
-        // This is required to perform initialization, i.e. to run main(), which indeed should exit with 0,
-        // so we catch the expected WasiExitException accordingly.
         try {
-            ExportFunction start = instance.export("_start");
-            start.apply();
+            // WasmQuarkusContext provides Instance with MachineFactory dynamically
+            // configured based on environment (dev, prod, native)
+            instance = Instance.builder(wasmModule)
+                    .withMachineFactory(wasmQuarkusContext.getMachineFactory())
+                    .withImportValues(store.toImportValues())
+                    .build();
+
+            exports = new K8sCel_ModuleExports(instance);
         } catch (com.dylibso.chicory.wasi.WasiExitException e) {
             // Expected - Go main() exits after completing
             if (e.exitCode() != 0) {
@@ -97,25 +82,24 @@ public class K8sCelValidatorService {
         byte[] inputBytes = resourceJson.getBytes(StandardCharsets.UTF_8);
 
         // Allocate memory for policy string in WASM
-        int policyPtr = (int) malloc.apply(policyBytes.length)[0];
+        int policyPtr = exports.malloc(policyBytes.length);
         if (policyPtr == 0) {
             throw new IllegalStateException("Failed to allocate memory for policy");
         }
 
         // Allocate memory for input JSON in WASM
-        int inputPtr = (int) malloc.apply(inputBytes.length)[0];
+        int inputPtr = exports.malloc(inputBytes.length);
         if (inputPtr == 0) {
             throw new IllegalStateException("Failed to allocate memory for input");
         }
 
         try {
             // Write policy and input to WASM memory
-            memory.write(policyPtr, policyBytes);
-            memory.write(inputPtr, inputBytes);
+            exports.memory().write(policyPtr, policyBytes);
+            exports.memory().write(inputPtr, inputBytes);
 
             // Call evalPolicy(policyPtr, policyLen, inputPtr, inputLen)
-            long[] result = evalPolicy.apply(policyPtr, policyBytes.length, inputPtr, inputBytes.length);
-            int returnCode = (int) result[0];
+            int returnCode = exports.evalPolicy(policyPtr, policyBytes.length, inputPtr, inputBytes.length);
 
             // Interpret result
             if (returnCode == 11) {
@@ -136,8 +120,8 @@ public class K8sCelValidatorService {
             }
         } finally {
             // Free allocated memory in WASM
-            free.apply(policyPtr);
-            free.apply(inputPtr);
+            exports.free(policyPtr);
+            exports.free(inputPtr);
         }
     }
 
