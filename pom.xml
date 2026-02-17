@@ -17,6 +17,8 @@
         <dylibso.version>1.6.1</dylibso.version>
         <quarkus-chicory.version>0.0.1</quarkus-chicory.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
+        <maven-antrun-plugin.version>3.2.0</maven-antrun-plugin.version>
+        <templating-maven-plugin.version>3.0.0</templating-maven-plugin.version>
     </properties>
 
     <dependencyManagement>
@@ -31,6 +33,11 @@
             <dependency>
                 <groupId>com.dylibso.chicory</groupId>
                 <artifactId>wasi</artifactId>
+                <version>${dylibso.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.dylibso.chicory</groupId>
+                <artifactId>annotations</artifactId>
                 <version>${dylibso.version}</version>
             </dependency>
             <dependency>
@@ -62,6 +69,10 @@
             <groupId>com.dylibso.chicory</groupId>
             <artifactId>wasi</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.dylibso.chicory</groupId>
+            <artifactId>annotations</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -88,6 +99,13 @@
                 <version>${compiler-plugin.version}</version>
                 <configuration>
                     <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.dylibso.chicory</groupId>
+                            <artifactId>annotations-processor</artifactId>
+                            <version>${dylibso.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>
@@ -120,6 +138,48 @@
                         <maven.home>${maven.home}</maven.home>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>${maven-antrun-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>normalize-wasm-path</id>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <phase>initialize</phase>
+                        <configuration>
+                            <target>
+                                <property location="${project.basedir}/src/main/resources/wasm/go-cel.wasm" name="wasm.resource.path.raw"/>
+                                <makeurl file="${wasm.resource.path.raw}" property="wasm.resource.url.temp"/>
+                                <loadresource property="wasm.resource.url">
+                                <propertyresource name="wasm.resource.url.temp"/>
+                                <filterchain>
+                                    <tokenfilter>
+                                    <replaceregex pattern="^file:/" replace="file:///"/>
+                                    </tokenfilter>
+                                </filterchain>
+                                </loadresource>
+                            </target>
+                            <exportAntProperties>true</exportAntProperties>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>templating-maven-plugin</artifactId>
+                <version>${templating-maven-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>filtering-java-templates</id>
+                        <goals>
+                            <goal>filter-sources</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
