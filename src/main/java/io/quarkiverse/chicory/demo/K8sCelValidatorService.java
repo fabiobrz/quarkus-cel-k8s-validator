@@ -8,6 +8,7 @@ import com.dylibso.chicory.wasi.WasiOptions;
 import com.dylibso.chicory.wasi.WasiPreview1;
 import com.dylibso.chicory.wasm.WasmModule;
 import io.quarkiverse.chicory.runtime.wasm.WasmQuarkusContext;
+import io.quarkus.runtime.annotations.RegisterForReflection;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -56,15 +57,21 @@ public class K8sCelValidatorService {
 
         Store store = new Store().addFunction(wasi.toHostFunctions());
 
-        try {
-            // WasmQuarkusContext provides Instance with MachineFactory dynamically
-            // configured based on environment (dev, prod, native)
-            instance = Instance.builder(wasmModule)
-                    .withMachineFactory(wasmQuarkusContext.getMachineFactory())
-                    .withImportValues(store.toImportValues())
-                    .build();
+        instance = Instance.builder(wasmModule)
+                .withMachineFactory(wasmQuarkusContext.getMachineFactory())
+                .withImportValues(store.toImportValues())
+                // Don't auto-run _start(), we'll call it manually
+                .withStart(false)
+                .build();
 
-            exports = new K8sCel_ModuleExports(instance);
+        // Get exported functions BEFORE calling _start
+        exports = new K8sCel_ModuleExports(instance);
+
+        // Initialize Go runtime by calling _start()
+        // This is required to perform initialization, i.e. to run main(), which indeed should exit with 0,
+        // so we catch the expected WasiExitException accordingly.
+        try {
+            exports._start();
         } catch (com.dylibso.chicory.wasi.WasiExitException e) {
             // Expected - Go main() exits after completing
             if (e.exitCode() != 0) {
@@ -132,5 +139,6 @@ public class K8sCelValidatorService {
     /**
      * Simple record to return structured validation results
      */
+    @RegisterForReflection
     public record ValidationResult(String status, String message, String policy) {}
 }
